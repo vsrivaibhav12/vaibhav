@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reports - GST Pro</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <nav class="top-bar">
+        <div class="logo">📊 Reports</div>
+        <div class="nav-links">
+            <a href="{{ url_for('dashboard') }}">← Dashboard</a>
+        </div>
+    </nav>
+
+    <main class="container">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+            <div>
+                <h1>Compliance Reports</h1>
+                <p class="subtitle">{{ fy_label }}</p>
+            </div>
+            <div style="display: flex; gap: 1rem;">
+                <a href="?view=monthly&month={{ month }}&year={{ year }}" class="btn {{ 'btn-primary' if view_type == 'monthly' else 'btn-outline' }}">Monthly View</a>
+                <a href="?view=fy&month={{ month }}&year={{ year }}" class="btn {{ 'btn-primary' if view_type == 'fy' else 'btn-outline' }}">Financial Year</a>
+                <a href="{{ url_for('export_excel', view=view_type, month=month, year=year) }}" class="btn btn-success">📥 Export Excel</a>
+            </div>
+        </div>
+
+        <!-- Stats Cards -->
+        <div class="stats-grid">
+            <div class="stat-card status-blue">
+                <div class="stat-header">
+                    <span class="stat-title">Total Clients</span>
+                </div>
+                <div class="stat-value">{{ total }}</div>
+            </div>
+            <div class="stat-card status-green">
+                <div class="stat-header">
+                    <span class="stat-title">GSTR-1 Filed</span>
+                </div>
+                <div class="stat-value">{{ g1_filed }}</div>
+            </div>
+            <div class="stat-card status-red">
+                <div class="stat-header">
+                    <span class="stat-title">GSTR-1 Pending</span>
+                </div>
+                <div class="stat-value">{{ g1_pending }}</div>
+            </div>
+            <div class="stat-card status-yellow">
+                <div class="stat-header">
+                    <span class="stat-title">GSTR-3B Status</span>
+                </div>
+                <div class="stat-value">{{ g3_filed }}/{{ total }}</div>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="row" style="margin-top: 2rem;">
+            <div class="col-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>GSTR-1 Completion Status</h2>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="gstr1Chart" height="200"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>GSTR-3B Completion Status</h2>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="gstr3bChart" height="200"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detailed Table -->
+        <div class="card" style="margin-top: 2rem;">
+            <div class="card-header">
+                <h2>Detailed Status</h2>
+            </div>
+            <div class="card-body" style="overflow-x: auto;">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Client</th>
+                            <th>GSTIN</th>
+                            <th>GSTR-1 Status</th>
+                            <th>GSTR-1 ARN</th>
+                            <th>GSTR-3B Status</th>
+                            <th>GSTR-3B ARN</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in report_data %}
+                        <tr>
+                            <td><strong>{{ item.client.client_name }}</strong></td>
+                            <td>{{ item.client.gstin or '-' }}</td>
+                            <td>
+                                <span class="status-pill status-{{ item.gstr1_color }}">
+                                    {{ item.gstr1.status if item.gstr1 else 'Not Started' }}
+                                </span>
+                            </td>
+                            <td>{{ item.gstr1.arn_number if item.gstr1 else '-' }}</td>
+                            <td>
+                                <span class="status-pill status-{{ item.gstr3b_color }}">
+                                    {{ item.gstr3b.status if item.gstr3b else 'Pending' }}
+                                </span>
+                            </td>
+                            <td>{{ item.gstr3b.arn_number if item.gstr3b else '-' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // GSTR-1 Chart
+        new Chart(document.getElementById('gstr1Chart'), {
+            type: 'doughnut',
+            data: {
+                labels: ['Filed & Locked', 'Pending'],
+                datasets: [{
+                    data: [{{ g1_filed }}, {{ g1_pending }}],
+                    backgroundColor: ['#059669', '#e5e7eb']
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { position: 'bottom' }
+                }
+            }
+        });
+
+        // GSTR-3B Chart
+        new Chart(document.getElementById('gstr3bChart'), {
+            type: 'doughnut',
+            data: {
+                labels: ['Filed & Locked', 'Pending'],
+                datasets: [{
+                    data: [{{ g3_filed }}, {{ g3_pending }}],
+                    backgroundColor: ['#2563eb', '#e5e7eb']
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { position: 'bottom' }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

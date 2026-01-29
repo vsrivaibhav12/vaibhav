@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - GST Pro</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+<body>
+    <nav class="top-bar">
+        <div class="logo">⚙️ Admin Panel</div>
+        <div class="nav-links">
+            <a href="{{ url_for('dashboard') }}">← Back to Dashboard</a>
+            <a href="{{ url_for('logout') }}">Logout</a>
+        </div>
+    </nav>
+
+    <main class="container">
+        <h1 style="margin-bottom: 2rem;">System Configuration</h1>
+
+        <!-- User Management -->
+        <div class="card" style="margin-bottom: 2rem;">
+            <div class="card-header">
+                <h2>👤 User Management</h2>
+                <button class="btn btn-primary" onclick="openUserModal()">+ Add User</button>
+            </div>
+            <div class="card-body">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Role</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for user in users %}
+                        <tr>
+                            <td><strong>{{ user.username }}</strong></td>
+                            <td><span class="role-badge role-{{ user.role }}">{{ user.role }}</span></td>
+                            <td>
+                                {% if user.active %}
+                                    <span style="color: var(--success);">● Active</span>
+                                {% else %}
+                                    <span style="color: var(--gray-600);">○ Inactive</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ user.created_at }}</td>
+                            <td>
+                                <form method="POST" action="{{ url_for('manage_user') }}" style="display: inline;">
+                                    <input type="hidden" name="action" value="toggle">
+                                    <input type="hidden" name="user_id" value="{{ user.id }}">
+                                    <button type="submit" class="btn btn-sm btn-outline">
+                                        {{ 'Deactivate' if user.active else 'Activate' }}
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Client Assignments -->
+        <div class="card">
+            <div class="card-header">
+                <h2>🔗 Client Allocations</h2>
+                <div style="display: flex; gap: 0.5rem;">
+                    <select id="alloc_month" class="form-control" style="width: auto;">
+                        {% for m in range(1, 13) %}
+                        <option value="{{ m }}">{{ ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1] }}</option>
+                        {% endfor %}
+                    </select>
+                    <select id="alloc_year" class="form-control" style="width: auto;">
+                        {% for y in range(2024, 2027) %}
+                        <option value="{{ y }}">{{ y }}</option>
+                        {% endfor %}
+                    </select>
+                    <button class="btn btn-primary" onclick="loadAllocations()">Load</button>
+                </div>
+            </div>
+            <div class="card-body">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Client</th>
+                            <th>GSTIN</th>
+                            <th>GSTR-1 Preparer</th>
+                            <th>GSTR-3B Preparer</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="allocationsTable">
+                        {% for client in clients %}
+                        <tr>
+                            <td><strong>{{ client.client_name }}</strong></td>
+                            <td>{{ client.gstin or '-' }}</td>
+                            <td>
+                                <select class="form-control assign-select" data-client="{{ client.id }}" data-type="gstr1" style="width: 150px;">
+                                    <option value="">Unassigned</option>
+                                    {% for p in preparers %}
+                                    <option value="{{ p.id }}">{{ p.username }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td>
+                                <select class="form-control assign-select" data-client="{{ client.id }}" data-type="gstr3b" style="width: 150px;">
+                                    <option value="">Unassigned</option>
+                                    {% for p in preparers %}
+                                    <option value="{{ p.id }}">{{ p.username }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-success" onclick="saveAllocation({{ client.id }})">Save</button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Archive Section -->
+        <div class="card" style="margin-top: 2rem;">
+            <div class="card-header">
+                <h2>📦 Financial Year Archive</h2>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('archive_fy') }}" onsubmit="return confirm('Archive this FY? Data will be moved to separate file.')">
+                    <div style="display: flex; gap: 1rem; align-items: end;">
+                        <div style="flex: 1;">
+                            <label class="form-label">Select Financial Year to Archive</label>
+                            <select name="fy" class="form-control">
+                                <option value="2023-24">2023-24</option>
+                                <option value="2024-25">2024-25</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-warning">Archive FY Data</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </main>
+
+    <!-- Add User Modal -->
+    <div id="userModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Add New User</h3>
+                <button onclick="closeUserModal()" style="background: none; border: none; font-size: 1.5rem;">&times;</button>
+            </div>
+            <form method="POST" action="{{ url_for('manage_user') }}">
+                <input type="hidden" name="action" value="create">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label class="form-label">Username</label>
+                        <input type="text" name="username" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Password</label>
+                        <input type="text" name="password" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Role</label>
+                        <select name="role" class="form-control">
+                            <option value="preparer">Preparer (Data Entry)</option>
+                            <option value="reviewer">Reviewer (Approval)</option>
+                            <option value="admin">Administrator</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline" onclick="closeUserModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create User</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let currentMonth = new Date().getMonth() + 1;
+        let currentYear = new Date().getFullYear();
+
+        function openUserModal() {
+            document.getElementById('userModal').style.display = 'flex';
+        }
+
+        function closeUserModal() {
+            document.getElementById('userModal').style.display = 'none';
+        }
+
+        function loadAllocations() {
+            const m = document.getElementById('alloc_month').value;
+            const y = document.getElementById('alloc_year').value;
+            // In real implementation, fetch current allocations via API
+            alert(`Loading allocations for ${m}/${y}`);
+        }
+
+        function saveAllocation(clientId) {
+            const month = document.getElementById('alloc_month').value;
+            const year = document.getElementById('alloc_year').value;
+
+            const gstr1Prep = document.querySelector(`select[data-client="${clientId}"][data-type="gstr1"]`).value;
+            const gstr3bPrep = document.querySelector(`select[data-client="${clientId}"][data-type="gstr3b"]`).value;
+
+            fetch('/api/assign', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    client_id: clientId,
+                    month: parseInt(month),
+                    year: parseInt(year),
+                    gstr1_preparer_id: gstr1Prep || null,
+                    gstr3b_preparer_id: gstr3bPrep || null
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Allocation saved successfully');
+                }
+            });
+        }
+
+        // Close modal on outside click
+        window.onclick = function(e) {
+            if (e.target.classList.contains('modal-overlay')) {
+                e.target.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>

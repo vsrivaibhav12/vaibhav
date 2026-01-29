@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - GST Pro</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <style>
+        .period-badge {
+            background: var(--primary);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: var(--radius);
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <nav class="top-bar">
+        <div class="logo">
+            📊 GST Pro
+        </div>
+        <div class="nav-links">
+            <a href="{{ url_for('dashboard') }}" class="active">Dashboard</a>
+            {% if user_role == 'admin' %}
+            <a href="{{ url_for('admin_panel') }}">Admin</a>
+            <a href="{{ url_for('reports') }}">Reports</a>
+            {% endif %}
+
+            <!-- Notification Bell -->
+            <div class="notification-bell" onclick="toggleNotifications()" style="position: relative;">
+                🔔
+                {% if unread_count > 0 %}
+                <span class="notification-count">{{ unread_count }}</span>
+                {% endif %}
+                <div class="notification-dropdown" id="notificationPanel">
+                    {% for n in notifications %}
+                    <div class="notification-item {{ 'unread' if not n.is_read else '' }}">
+                        <div class="notification-title">{{ n.title }}</div>
+                        <div>{{ n.message }}</div>
+                        <div class="notification-time">{{ n.created_at }}</div>
+                    </div>
+                    {% endfor %}
+                    <div style="padding: 0.75rem; text-align: center; border-top: 1px solid var(--gray-200);">
+                        <a href="#" onclick="markAllRead()">Mark all as read</a>
+                    </div>
+                </div>
+            </div>
+
+            <a href="{{ url_for('logout') }}" style="color: var(--danger);">Logout ({{ session.username }})</a>
+        </div>
+    </nav>
+
+    <main class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="page-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <h1>
+                    {% if user_role == 'admin' %}
+                        Command Center
+                    {% elif user_role == 'reviewer' %}
+                        Review Dashboard
+                    {% else %}
+                        My Work
+                    {% endif %}
+                </h1>
+                <p class="subtitle">
+                    FY {{ fy }} | Current Filing Month: <span class="period-badge">{{ month_name }} {{ current_year }}</span>
+                </p>
+            </div>
+
+            {% if user_role == 'admin' %}
+            <div class="toggle-container">
+                <button class="toggle-btn active" onclick="setView('monthly')">Monthly View</button>
+                <button class="toggle-btn" onclick="setView('fy')">Financial Year</button>
+            </div>
+            {% endif %}
+        </div>
+
+        {% if user_role == 'admin' %}
+        <!-- ADMIN COMMAND CENTER -->
+        <div class="stats-grid">
+            <div class="stat-card status-green">
+                <div class="stat-header">
+                    <span class="stat-title">Total Clients</span>
+                    <span style="font-size: 1.5rem;">👥</span>
+                </div>
+                <div class="stat-value">{{ total_clients }}</div>
+                <div class="stat-footer">Active in system</div>
+            </div>
+
+            <div class="stat-card status-blue">
+                <div class="stat-header">
+                    <span class="stat-title">GSTR-1 Filed</span>
+                    <span style="font-size: 1.5rem;">✅</span>
+                </div>
+                <div class="stat-value">{{ gstr1_stats.get('locked', 0) }}</div>
+                <div class="stat-footer">{{ gstr1_pending }} pending</div>
+            </div>
+
+            <div class="stat-card status-red">
+                <div class="stat-header">
+                    <span class="stat-title">Overdue GSTR-1</span>
+                    <span style="font-size: 1.5rem;">⚠️</span>
+                </div>
+                <div class="stat-value">{{ gstr1_overdue }}</div>
+                <div class="stat-footer">Action needed</div>
+            </div>
+
+            <div class="stat-card status-yellow">
+                <div class="stat-header">
+                    <span class="stat-title">GSTR-3B Pending</span>
+                    <span style="font-size: 1.5rem;">📋</span>
+                </div>
+                <div class="stat-value">{{ gstr3b_pending }}</div>
+                <div class="stat-footer">Awaiting filing</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2>Quick Actions</h2>
+                <button class="btn btn-primary" onclick="openClientModal()">+ New Client</button>
+            </div>
+            <div class="card-body" style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                <a href="{{ url_for('reports') }}" class="btn btn-outline">📊 View Detailed Reports</a>
+                <a href="{{ url_for('admin_panel') }}" class="btn btn-outline">⚙️ Manage Users & Assignments</a>
+            </div>
+        </div>
+
+        {% elif user_role == 'reviewer' %}
+        <!-- REVIEWER INBOX -->
+        <div class="stats-grid">
+            <div class="stat-card status-warning">
+                <div class="stat-header">
+                    <span class="stat-title">Pending Review</span>
+                </div>
+                <div class="stat-value">{{ pending_count }}</div>
+                <div class="stat-footer">Items in your queue</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2>Review Queue</h2>
+            </div>
+            <div class="card-body">
+                {% if review_items %}
+                <div class="client-grid">
+                    {% for item in review_items %}
+                    <div class="client-card">
+                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
+                            <span class="client-name">{{ item.client_name }}</span>
+                            <span class="status-pill status-review">Review</span>
+                        </div>
+                        <div style="font-size: 0.875rem; color: var(--gray-600); margin-bottom: 1rem;">
+                            {{ item.month }}/{{ item.year }} • 
+                            {{ 'GSTR-1' if item.return_type == 'gstr1' else 'GSTR-3B' }}
+                        </div>
+                        <a href="{{ url_for(item.return_type + '_form', client_id=item.client_id, month=item.month, year=item.year) }}" 
+                           class="btn btn-primary btn-sm" style="width: 100%; justify-content: center;">
+                            Review Now
+                        </a>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div style="text-align: center; padding: 3rem; color: var(--gray-600);">
+                    <div style="font-size: 3rem; margin-bottom: 1rem;">🎉</div>
+                    <h3>All caught up!</h3>
+                    <p>No items pending review</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% else %}
+        <!-- PREPARER WORKSPACE -->
+        <div class="card" style="margin-bottom: 2rem;">
+            <div class="card-header">
+                <h2>Select Period</h2>
+            </div>
+            <div class="card-body" style="display: flex; gap: 1rem; align-items: end;">
+                <div style="flex: 1;">
+                    <label class="form-label">Month</label>
+                    <select id="selMonth" class="form-control">
+                        {% for m in range(1, 13) %}
+                        <option value="{{ m }}" {{ 'selected' if m == current_month else '' }}>
+                            {{ ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1] }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div style="flex: 1;">
+                    <label class="form-label">Year</label>
+                    <select id="selYear" class="form-control">
+                        {% for y in range(2024, 2027) %}
+                        <option value="{{ y }}" {{ 'selected' if y == current_year else '' }}>{{ y }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button class="btn btn-primary" onclick="loadMyWork()">Load Worklist</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2>My Assigned Clients - {{ month_name }} {{ current_year }}</h2>
+            </div>
+            <div class="card-body">
+                {% if assigned_clients %}
+                <div class="client-grid">
+                    {% for client in assigned_clients %}
+                    <div class="client-card">
+                        <div class="client-name">{{ client.client_name }}</div>
+                        <div class="client-gstin">{{ client.gstin or 'No GSTIN' }}</div>
+
+                        <div style="margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                            {% if client.gstr1_preparer_id == session.user_id %}
+                                {% if not client.gstr1_status or client.gstr1_status == 'draft' %}
+                                <span class="status-pill status-draft">GSTR-1: Draft</span>
+                                {% elif client.gstr1_status == 'under_review' %}
+                                <span class="status-pill status-review">GSTR-1: Review</span>
+                                {% elif client.gstr1_status == 'approved' %}
+                                <span class="status-pill status-approved">GSTR-1: Approved</span>
+                                {% else %}
+                                <span class="status-pill status-locked">GSTR-1: Filed</span>
+                                {% endif %}
+                            {% endif %}
+
+                            {% if client.gstr3b_preparer_id == session.user_id %}
+                                {% if not client.gstr3b_status or client.gstr3b_status in ['pending', 'draft'] %}
+                                <span class="status-pill status-draft">3B: Pending</span>
+                                {% elif client.gstr3b_status == 'under_review' %}
+                                <span class="status-pill status-review">3B: Review</span>
+                                {% elif client.gstr3b_status == 'approved' %}
+                                <span class="status-pill status-approved">3B: Approved</span>
+                                {% else %}
+                                <span class="status-pill status-locked">3B: Filed</span>
+                                {% endif %}
+                            {% endif %}
+                        </div>
+
+                        <div style="margin-top: 1rem; display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                            {% if client.gstr1_preparer_id == session.user_id %}
+                            <a href="{{ url_for('gstr1_form', client_id=client.client_id, month=current_month, year=current_year) }}" 
+                               class="btn btn-primary btn-sm" style="justify-content: center;">
+                               {% if client.gstr1_status == 'locked' %}View GSTR-1{% else %}Work GSTR-1{% endif %}
+                            </a>
+                            {% endif %}
+
+                            {% if client.gstr3b_preparer_id == session.user_id %}
+                            <a href="{{ url_for('gstr3b_form', client_id=client.client_id, month=current_month, year=current_year) }}" 
+                               class="btn btn-outline btn-sm" style="justify-content: center;"
+                               {% if client.gstr1_status != 'locked' %}onclick="alert('GSTR-1 must be locked first'); return false;"{% endif %}>
+                               {% if client.gstr3b_status == 'locked' %}View 3B{% else %}Work 3B{% endif %}
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div style="text-align: center; padding: 3rem; color: var(--gray-600);">
+                    <div style="font-size: 3rem; margin-bottom: 1rem;">📋</div>
+                    <h3>No assignments</h3>
+                    <p>You have no clients assigned for this period</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </main>
+
+    <!-- New Client Modal (Admin only) -->
+    {% if user_role == 'admin' %}
+    <div id="clientModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Add New Client</h3>
+                <button onclick="closeClientModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+            </div>
+            <form method="POST" action="{{ url_for('manage_client') }}">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label class="form-label">Client Name *</label>
+                        <input type="text" name="client_name" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">GSTIN (Optional)</label>
+                        <input type="text" name="gstin" class="form-control" placeholder="22AAAAA0000A1Z5">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline" onclick="closeClientModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Client</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+
+    <script>
+        // Notification Toggle
+        function toggleNotifications() {
+            const panel = document.getElementById('notificationPanel');
+            panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+        }
+
+        function markAllRead() {
+            fetch('/api/notifications/read', { method: 'POST' })
+                .then(() => location.reload());
+        }
+
+        // Admin View Toggle
+        function setView(view) {
+            // Implementation for monthly vs FY view switching
+            location.href = '/dashboard?view=' + view;
+        }
+
+        // Preparer Period Selection
+        function loadMyWork() {
+            const m = document.getElementById('selMonth').value;
+            const y = document.getElementById('selYear').value;
+            location.href = `/dashboard?month=${m}&year=${y}`;
+        }
+
+        // Modal Controls
+        function openClientModal() {
+            document.getElementById('clientModal').style.display = 'flex';
+        }
+
+        function closeClientModal() {
+            document.getElementById('clientModal').style.display = 'none';
+        }
+
+        // Close modal on outside click
+        window.onclick = function(e) {
+            if (e.target.classList.contains('modal-overlay')) {
+                e.target.style.display = 'none';
+            }
+            if (!e.target.closest('.notification-bell')) {
+                document.getElementById('notificationPanel').style.display = 'none';
+            }
+        }
+
+        // Check for due date alerts on load (for admin)
+        {% if user_role == 'admin' %}
+        fetch('/api/check_due_dates')
+            .then(r => r.json())
+            .then(alerts => {
+                if (alerts.length > 0) {
+                    // Show alert banner
+                    const alertHtml = `<div class="alert alert-error" style="animation: fadeIn 0.5s;">
+                        <strong>⚠️ Upcoming Due Dates:</strong> ${alerts.length} filings due within 3 days!
+                    </div>`;
+                    document.querySelector('.container').insertAdjacentHTML('afterbegin', alertHtml);
+                }
+            });
+        {% endif %}
+    </script>
+</body>
+</html>

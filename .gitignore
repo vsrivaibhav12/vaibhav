@@ -1,0 +1,40 @@
+# GST Pro - Files to ignore
+
+# Database
+*.db
+*.db-journal
+
+# Backups
+backups/
+archive/
+backups/*.db
+archive/*.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Config (keep template only)
+config.py
+!config_template.py

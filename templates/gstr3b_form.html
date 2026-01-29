@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GSTR-3B - {{ client.client_name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <style>
+        .imported-box {
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: var(--radius);
+            padding: 1.25rem;
+            margin-bottom: 1.5rem;
+        }
+        .imported-box h3 {
+            color: var(--success);
+            margin-bottom: 0.75rem;
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .imported-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1rem;
+        }
+        .imported-item {
+            text-align: center;
+        }
+        .imported-value {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--gray-800);
+        }
+        .imported-label {
+            font-size: 0.75rem;
+            color: var(--gray-600);
+            margin-top: 0.25rem;
+        }
+
+        .calc-section {
+            background: var(--gray-50);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            margin-top: 1.5rem;
+        }
+        .calc-section h4 {
+            font-size: 1rem;
+            margin-bottom: 1rem;
+            color: var(--gray-800);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .result-box {
+            background: white;
+            border: 2px solid var(--primary);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            text-align: center;
+            margin-top: 1.5rem;
+        }
+        .result-label {
+            font-size: 0.875rem;
+            color: var(--gray-600);
+            margin-bottom: 0.5rem;
+        }
+        .result-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--gray-800);
+        }
+        .result-value.positive { color: var(--danger); }
+        .result-value.negative { color: var(--success); }
+
+        .variance-alert {
+            background: #fef3c7;
+            border-left: 4px solid var(--warning);
+            padding: 1rem;
+            margin-top: 1rem;
+            border-radius: var(--radius);
+            font-size: 0.875rem;
+        }
+    </style>
+</head>
+<body>
+    <nav class="top-bar">
+        <div class="logo">📊 GST Pro</div>
+        <div class="nav-links">
+            <span style="color: var(--gray-600);">{{ client.client_name }} | {{ month_name }} {{ year }}</span>
+            <a href="{{ url_for('dashboard') }}">← Dashboard</a>
+            <a href="{{ url_for('gstr1_form', client_id=client.id, month=month, year=year) }}">← GSTR-1</a>
+        </div>
+    </nav>
+
+    <main class="container">
+        <div class="page-header">
+            <h1>📋 GSTR-3B Return</h1>
+            <p class="subtitle">Input Tax Credit & Liability Statement</p>
+        </div>
+
+        <!-- Auto-imported from GSTR-1 -->
+        <div class="imported-box">
+            <h3>📥 Auto-imported from GSTR-1 (Locked)</h3>
+            <div class="imported-grid">
+                <div class="imported-item">
+                    <div class="imported-value">₹ {{ "%.2f"|format(gstr1.total_sales or 0) }}</div>
+                    <div class="imported-label">Taxable Value</div>
+                </div>
+                <div class="imported-item">
+                    <div class="imported-value">₹ {{ "%.2f"|format(gstr1.total_cgst or 0) }}</div>
+                    <div class="imported-label">CGST</div>
+                </div>
+                <div class="imported-item">
+                    <div class="imported-value">₹ {{ "%.2f"|format(gstr1.total_sgst or 0) }}</div>
+                    <div class="imported-label">SGST</div>
+                </div>
+                <div class="imported-item">
+                    <div class="imported-value">₹ {{ "%.2f"|format(gstr1.total_igst or 0) }}</div>
+                    <div class="imported-label">IGST</div>
+                </div>
+            </div>
+        </div>
+
+        {% if is_locked %}
+        <div class="alert alert-error" style="text-align: center;">
+            <strong>🔒 FILED & LOCKED</strong><br>
+            ARN: {{ record.arn_number }}
+        </div>
+        {% endif %}
+
+        <div class="row">
+            <div class="col-6">
+                <!-- Values as per 2B -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>📄 Values as per GSTR-2B</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-grid" style="display: grid; gap: 1rem;">
+                            <div class="form-group">
+                                <label class="form-label">Taxable Value</label>
+                                <input type="number" step="0.01" class="form-control" id="tv_2b"
+                                       value="{{ record.tv_2b or 0 }}" {% if not can_edit %}disabled{% endif %}
+                                       oninput="calculate3B(); queueSave();">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">CGST</label>
+                                <input type="number" step="0.01" class="form-control" id="cgst_2b"
+                                       value="{{ record.cgst_2b or 0 }}" {% if not can_edit %}disabled{% endif %}
+                                       oninput="calculate3B(); queueSave();">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">SGST</label>
+                                <input type="number" step="0.01" class="form-control" id="sgst_2b"
+                                       value="{{ record.sgst_2b or 0 }}" {% if not can_edit %}disabled{% endif %}
+                                       oninput="calculate3B(); queueSave();">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">IGST</label>
+                                <input type="number" step="0.01" class="form-control" id="igst_2b"
+                                       value="{{ record.igst_2b or 0 }}" {% if not can_edit %}disabled{% endif %}
+                                       oninput="calculate3B(); queueSave();">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ITC as per Tally -->
+                <div class="card" style="margin-top: 1.5rem;">
+                    <div class="card-header">
+                        <h2>📚 ITC as per Tally/Books</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-grid" style="display: grid; gap: 1rem;">
+                            <div class="form-group">
+                                <label class="form-label">Taxable Value</label>
+                                <input type="number" step="0.01" class="form-control" id="tv_tally"
+                                       value="{{ record.tv_tally or 0 }}" {% if not can_edit %}disabled{% endif %}
+                                       oninput="calculate3B(); queueSave();">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">CGST</label>
+                                <input type="number" step="0.01" class="form-control" id="cgst_tally"
+                                       value="{{ record.cgst_tally or 0 }}" {% if not can_edit %}disabled{% endif %}
+                                       oninput="calculate3B(); queueSave();">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">SGST</label>
+                                <input type="number" step="0.01" class="form-control" id="sgst_tally"
+                                       value="{{ record.sgst_tally or 0 }}" {% if not can_edit %}disabled{% endif %}
+                                       oninput="calculate3B(); queueSave();">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">IGST</label>
+                                <input type="number" step="0.01" class="form-control" id="igst_tally"
+                                       value="{{ record.igst_tally or 0 }}" {% if not can_edit %}disabled{% endif %}
+                                       oninput="calculate3B(); queueSave();">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-6">
+                <!-- Ineligible ITC -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>⛔ Ineligible ITC to Reclaim</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-grid" style="display: grid; gap: 1rem;">
+                            <div class="form-group">
+                                <label class="form-label">CGST Ineligible</label>
+                                <input type="number" step="0.01" class="form-control" id="ineligible_cgst"
+                                       value="{{ record.ineligible_cgst or 0 }}" {% if not can_edit %}disabled{% endif %}
+                                       oninput="calculate3B(); queueSave();">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">SGST Ineligible</label>
+                                <input type="number" step="0.01" class="form-control" id="ineligible_sgst"
+                                       value="{{ record.ineligible_sgst or 0 }}" {% if not can_edit %}disabled{% endif %}
+                                       oninput="calculate3B(); queueSave();">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">IGST Ineligible</label>
+                                <input type="number" step="0.01" class="form-control" id="ineligible_igst"
+                                       value="{{ record.ineligible_igst or 0 }}" {% if not can_edit %}disabled{% endif %}
+                                       oninput="calculate3B(); queueSave();">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- RCM ITC -->
+                <div class="card" style="margin-top: 1.5rem;">
+                    <div class="card-header">
+                        <h2>🔄 RCM ITC to Claim</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-grid" style="display: grid; gap: 1rem;">
+                            <div class="form-group">
+                                <label class="form-label">RCM CGST</label>
+                                <input type="number" step="0.01" class="form-control" id="rcm_cgst"
+                                       value="{{ record.rcm_cgst or 0 }}" {% if not can_edit %}disabled{% endif %}
+                                       oninput="calculate3B(); queueSave();">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">RCM SGST</label>
+                                <input type="number" step="0.01" class="form-control" id="rcm_sgst"
+                                       value="{{ record.rcm_sgst or 0 }}" {% if not can_edit %}disabled{% endif %}
+                                       oninput="calculate3B(); queueSave();">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">RCM IGST</label>
+                                <input type="number" step="0.01" class="form-control" id="rcm_igst"
+                                       value="{{ record.rcm_igst or 0 }}" {% if not can_edit %}disabled{% endif %}
+                                       oninput="calculate3B(); queueSave();">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Interest & Late Fee -->
+                <div class="card" style="margin-top: 1.5rem;">
+                    <div class="card-header">
+                        <h2>💸 Interest & Late Fee</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-grid" style="display: grid; gap: 1rem;">
+                            <div class="form-group">
+                                <label class="form-label">Interest CGST</label>
+                                <input type="number" step="0.01" class="form-control" id="interest_cgst"
+                                       value="{{ record.interest_cgst or 0 }}" {% if not can_edit %}disabled{% endif %}
+                                       oninput="calculate3B(); queueSave();">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Interest SGST</label>
+                                <input type="number" step="0.01" class="form-control" id="interest_sgst"
+                                       value="{{ record.interest_sgst or 0 }}" {% if not can_edit %}disabled{% endif %}
+                                       oninput="calculate3B(); queueSave();">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Interest IGST</label>
+                                <input type="number" step="0.01" class="form-control" id="interest_igst"
+                                       value="{{ record.interest_igst or 0 }}" {% if not can_edit %}disabled{% endif %}
+                                       oninput="calculate3B(); queueSave();">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Late Fee</label>
+                                <input type="number" step="0.01" class="form-control" id="late_fee"
+                                       value="{{ record.late_fee or 0 }}" {% if not can_edit %}disabled{% endif %}
+                                       oninput="calculate3B(); queueSave();">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3B Outward Liability Entry -->
+        <div class="card" style="margin-top: 1.5rem;">
+            <div class="card-header">
+                <h2>📤 3B Outward Liability</h2>
+                <span style="font-size: 0.875rem; color: var(--gray-600);">Copy from GSTR-1 or override if amended</span>
+            </div>
+            <div class="card-body">
+                <div class="form-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label">Taxable Value</label>
+                        <input type="number" step="0.01" class="form-control" id="liability_tv"
+                               value="{{ record.liability_tv or gstr1.total_sales }}" {% if not can_edit %}disabled{% endif %}
+                               oninput="calculate3B(); queueSave();">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">CGST</label>
+                        <input type="number" step="0.01" class="form-control" id="liability_cgst"
+                               value="{{ record.liability_cgst or gstr1.total_cgst }}" {% if not can_edit %}disabled{% endif %}
+                               oninput="calculate3B(); queueSave();">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">SGST</label>
+                        <input type="number" step="0.01" class="form-control" id="liability_sgst"
+                               value="{{ record.liability_sgst or gstr1.total_sgst }}" {% if not can_edit %}disabled{% endif %}
+                               oninput="calculate3B(); queueSave();">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">IGST</label>
+                        <input type="number" step="0.01" class="form-control" id="liability_igst"
+                               value="{{ record.liability_igst or gstr1.total_igst }}" {% if not can_edit %}disabled{% endif %}
+                               oninput="calculate3B(); queueSave();">
+                    </div>
+                </div>
+
+                <!-- Variance check between GSTR-1 and 3B -->
+                <div class="variance-alert" id="tv_variance_alert" style="display: none;">
+                    <strong>⚠️ Variance Detected:</strong> 
+                    3B Liability TV differs from GSTR-1 TV by ₹ <span id="tv_variance_value">0.00</span>
+                </div>
+                {% if record.tv_variance and record.tv_variance != 0 %}
+                <div class="variance-alert">
+                    <strong>⚠️ Variance Detected:</strong> 
+                    3B Liability TV differs from GSTR-1 TV by ₹ {{ "%.2f"|format(record.tv_variance) }}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Calculation Results -->
+        <div class="row" style="margin-top: 1.5rem; margin-bottom: 2rem;">
+            <div class="col-6">
+                <div class="calc-section">
+                    <h4>🧮 Eligible ITC Calculation</h4>
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; text-align: center;">
+                        <div>
+                            <div style="font-size: 0.75rem; color: var(--gray-600);">CGST</div>
+                            <div style="font-size: 1.25rem; font-weight: 600;" id="eligible_cgst">₹ 0.00</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.75rem; color: var(--gray-600);">SGST</div>
+                            <div style="font-size: 1.25rem; font-weight: 600;" id="eligible_sgst">₹ 0.00</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.75rem; color: var(--gray-600);">IGST</div>
+                            <div style="font-size: 1.25rem; font-weight: 600;" id="eligible_igst">₹ 0.00</div>
+                        </div>
+                    </div>
+                    <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--gray-300); text-align: center;">
+                        <div style="font-size: 0.875rem; color: var(--gray-600);">Total Eligible ITC</div>
+                        <div style="font-size: 1.5rem; font-weight: 700; color: var(--success);" id="eligible_total">₹ 0.00</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="result-box">
+                    <div class="result-label">Net Tax Liability to Pay</div>
+                    <div class="result-value positive" id="net_total">₹ 0.00</div>
+                    <div style="font-size: 0.875rem; color: var(--gray-600); margin-top: 0.5rem;" id="liability_message">
+                        Tax payable to Government
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        {% if can_edit or can_review %}
+        <div class="card" style="margin-bottom: 2rem;">
+            <div class="card-header">
+                <h2>⚡ Workflow Actions</h2>
+            </div>
+            <div class="card-body">
+                {% if can_edit %}
+                <form method="POST" action="#" style="display: inline;">
+                    <button type="button" class="btn btn-primary" onclick="submitForReview()">📤 Submit for Review</button>
+                </form>
+                {% endif %}
+
+                {% if can_review %}
+                <button class="btn btn-success">✅ Approve</button>
+                <button class="btn btn-danger">❌ Send Back</button>
+                {% endif %}
+
+                {% if can_file %}
+                <form method="POST" action="#" style="display: inline;">
+                    <input type="text" name="arn_number" placeholder="ARN Number" class="form-control" style="display: inline-block; width: 200px; margin: 0 0.5rem;">
+                    <button type="submit" class="btn btn-success">🔒 File & Lock</button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </main>
+
+    <!-- Save Indicator -->
+    <div id="saveIndicator" class="save-indicator">✅ Saved</div>
+
+    <script>
+        let saveTimeout;
+
+        function calculate3B() {
+            // Get input values
+            const cgst_tally = parseFloat(document.getElementById('cgst_tally').value) || 0;
+            const sgst_tally = parseFloat(document.getElementById('sgst_tally').value) || 0;
+            const igst_tally = parseFloat(document.getElementById('igst_tally').value) || 0;
+
+            const ineligible_cgst = parseFloat(document.getElementById('ineligible_cgst').value) || 0;
+            const ineligible_sgst = parseFloat(document.getElementById('ineligible_sgst').value) || 0;
+            const ineligible_igst = parseFloat(document.getElementById('ineligible_igst').value) || 0;
+
+            const rcm_cgst = parseFloat(document.getElementById('rcm_cgst').value) || 0;
+            const rcm_sgst = parseFloat(document.getElementById('rcm_sgst').value) || 0;
+            const rcm_igst = parseFloat(document.getElementById('rcm_igst').value) || 0;
+
+            const interest_cgst = parseFloat(document.getElementById('interest_cgst').value) || 0;
+            const interest_sgst = parseFloat(document.getElementById('interest_sgst').value) || 0;
+            const interest_igst = parseFloat(document.getElementById('interest_igst').value) || 0;
+            const late_fee = parseFloat(document.getElementById('late_fee').value) || 0;
+
+            const liability_cgst = parseFloat(document.getElementById('liability_cgst').value) || 0;
+            const liability_sgst = parseFloat(document.getElementById('liability_sgst').value) || 0;
+            const liability_igst = parseFloat(document.getElementById('liability_igst').value) || 0;
+
+            const gstr1_tv = {{ gstr1.total_sales or 0 }};
+            const liability_tv = parseFloat(document.getElementById('liability_tv').value) || 0;
+
+            // Calculate Eligible ITC
+            const eligible_cgst = cgst_tally + rcm_cgst - ineligible_cgst;
+            const eligible_sgst = sgst_tally + rcm_sgst - ineligible_sgst;
+            const eligible_igst = igst_tally + rcm_igst - ineligible_igst;
+
+            // Calculate Net Liability
+            const net_cgst = liability_cgst - eligible_cgst + interest_cgst;
+            const net_sgst = liability_sgst - eligible_sgst + interest_sgst;
+            const net_igst = liability_igst - eligible_igst + interest_igst;
+            const net_total = net_cgst + net_sgst + net_igst + late_fee;
+
+            // Update display
+            document.getElementById('eligible_cgst').textContent = '₹ ' + eligible_cgst.toFixed(2);
+            document.getElementById('eligible_sgst').textContent = '₹ ' + eligible_sgst.toFixed(2);
+            document.getElementById('eligible_igst').textContent = '₹ ' + eligible_igst.toFixed(2);
+            document.getElementById('eligible_total').textContent = '₹ ' + (eligible_cgst + eligible_sgst + eligible_igst).toFixed(2);
+
+            const netElem = document.getElementById('net_total');
+            netElem.textContent = '₹ ' + Math.abs(net_total).toFixed(2);
+
+            const msgElem = document.getElementById('liability_message');
+            if (net_total > 0) {
+                netElem.className = 'result-value positive';
+                msgElem.textContent = 'Tax Payable to Government';
+            } else if (net_total < 0) {
+                netElem.className = 'result-value negative';
+                msgElem.textContent = 'Excess ITC - Carry Forward';
+            } else {
+                netElem.className = 'result-value';
+                msgElem.textContent = 'Nil Liability';
+            }
+
+            // Check GSTR-1 vs 3B variance
+            const tv_variance = liability_tv - gstr1_tv;
+            if (Math.abs(tv_variance) > 0.01) {
+                document.getElementById('tv_variance_alert').style.display = 'block';
+                document.getElementById('tv_variance_value').textContent = tv_variance.toFixed(2);
+            } else {
+                document.getElementById('tv_variance_alert').style.display = 'none';
+            }
+        }
+
+        function queueSave() {
+            {% if can_edit %}
+            clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(autoSave, 1500);
+            {% endif %}
+        }
+
+        function autoSave() {
+            const data = {
+                record_id: {{ record.id }},
+                liability_tv: document.getElementById('liability_tv').value,
+                liability_cgst: document.getElementById('liability_cgst').value,
+                liability_sgst: document.getElementById('liability_sgst').value,
+                liability_igst: document.getElementById('liability_igst').value,
+                tv_2b: document.getElementById('tv_2b').value,
+                cgst_2b: document.getElementById('cgst_2b').value,
+                sgst_2b: document.getElementById('sgst_2b').value,
+                igst_2b: document.getElementById('igst_2b').value,
+                tv_tally: document.getElementById('tv_tally').value,
+                cgst_tally: document.getElementById('cgst_tally').value,
+                sgst_tally: document.getElementById('sgst_tally').value,
+                igst_tally: document.getElementById('igst_tally').value,
+                ineligible_cgst: document.getElementById('ineligible_cgst').value,
+                ineligible_sgst: document.getElementById('ineligible_sgst').value,
+                ineligible_igst: document.getElementById('ineligible_igst').value,
+                rcm_cgst: document.getElementById('rcm_cgst').value,
+                rcm_sgst: document.getElementById('rcm_sgst').value,
+                rcm_igst: document.getElementById('rcm_igst').value,
+                interest_cgst: document.getElementById('interest_cgst').value,
+                interest_sgst: document.getElementById('interest_sgst').value,
+                interest_igst: document.getElementById('interest_igst').value,
+                late_fee: document.getElementById('late_fee').value,
+                tv_variance: (parseFloat(document.getElementById('liability_tv').value) || 0) - {{ gstr1.total_sales or 0 }}
+            };
+
+            fetch('/api/gstr3b/save', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) showSaveIndicator();
+            });
+        }
+
+        function showSaveIndicator() {
+            const ind = document.getElementById('saveIndicator');
+            ind.classList.add('show');
+            setTimeout(() => ind.classList.remove('show'), 2000);
+        }
+
+        // Initial calculation
+        calculate3B();
+    </script>
+</body>
+</html>

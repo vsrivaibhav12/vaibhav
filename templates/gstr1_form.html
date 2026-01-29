@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GSTR-1 - {{ client.client_name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <style>
+        .workflow-bar {
+            padding: 1rem 2rem;
+            color: white;
+            font-weight: 600;
+            text-align: center;
+        }
+        .status-draft { background: var(--gray-600); }
+        .status-review { background: var(--warning); }
+        .status-approved { background: var(--success); }
+        .status-locked { background: var(--primary); }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        .input-group {
+            position: relative;
+        }
+
+        .input-prefix {
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--gray-600);
+            font-weight: 600;
+        }
+
+        input[type="number"] {
+            padding-left: 2rem !important;
+            text-align: right;
+        }
+
+        .calc-display {
+            background: var(--gray-50);
+            padding: 1.5rem;
+            border-radius: var(--radius);
+            border-left: 4px solid var(--primary);
+        }
+
+        .calc-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--gray-800);
+        }
+
+        .calc-label {
+            font-size: 0.875rem;
+            color: var(--gray-600);
+        }
+
+        .variance-positive { color: var(--success); }
+        .variance-negative { color: var(--danger); }
+
+        .readonly-field {
+            background: var(--gray-100) !important;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <!-- Workflow Status Bar -->
+    <div class="workflow-bar status-{{ record.status }}">
+        {% if record.status == 'draft' %}
+            📝 DRAFT - {{ 'You can edit' if can_edit else 'Waiting for preparer' }}
+        {% elif record.status == 'under_review' %}
+            👀 UNDER REVIEW - {{ 'Waiting for your approval' if can_review else 'Reviewer is checking' }}
+        {% elif record.status == 'approved' %}
+            ✅ APPROVED - Ready for filing with ARN
+        {% elif record.status == 'locked' %}
+            🔒 FILED & LOCKED - ARN: {{ record.arn_number }}
+        {% endif %}
+    </div>
+
+    <nav class="top-bar">
+        <div class="logo">📊 GST Pro</div>
+        <div class="nav-links">
+            <span style="color: var(--gray-600);">{{ client.client_name }} | {{ month_name }} {{ year }}</span>
+            <a href="{{ url_for('dashboard') }}">← Back</a>
+        </div>
+    </nav>
+
+    <main class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="row">
+            <!-- Left Column: Checklist & Data Entry -->
+            <div class="col-8">
+                <!-- Checklist -->
+                <div class="card" style="margin-bottom: 1.5rem;">
+                    <div class="card-header">
+                        <h2>✅ Pre-Entry Checklist</h2>
+                    </div>
+                    <div style="padding: 0;">
+                        <div class="checklist-item">
+                            <input type="checkbox" id="chk_sales" 
+                                {% if record.chk_sales %}checked{% endif %} 
+                                {% if not can_edit %}disabled{% endif %}
+                                onchange="updateChecklist('sales', this.checked)">
+                            <label for="chk_sales">
+                                Sales invoices collected and checked
+                                {% if record.chk_sales_time %}
+                                <span class="timestamp">✓ {{ record.chk_sales_time }}</span>
+                                {% endif %}
+                            </label>
+                        </div>
+                        <div class="checklist-item">
+                            <input type="checkbox" id="chk_purchase" 
+                                {% if record.chk_purchase %}checked{% endif %} 
+                                {% if not can_edit %}disabled{% endif %}
+                                onchange="updateChecklist('purchase', this.checked)">
+                            <label for="chk_purchase">
+                                Purchase invoices collected and reconciled
+                                {% if record.chk_purchase_time %}
+                                <span class="timestamp">✓ {{ record.chk_purchase_time }}</span>
+                                {% endif %}
+                            </label>
+                        </div>
+                        <div class="checklist-item">
+                            <input type="checkbox" id="chk_notes" 
+                                {% if record.chk_notes %}checked{% endif %} 
+                                {% if not can_edit %}disabled{% endif %}
+                                onchange="updateChecklist('notes', this.checked)">
+                            <label for="chk_notes">
+                                Debit/Credit Notes collected
+                                {% if record.chk_notes_time %}
+                                <span class="timestamp">✓ {{ record.chk_notes_time }}</span>
+                                {% endif %}
+                            </label>
+                        </div>
+                        <div class="checklist-item">
+                            <input type="checkbox" id="chk_continuity" 
+                                {% if record.chk_continuity %}checked{% endif %} 
+                                {% if not can_edit %}disabled{% endif %}
+                                onchange="updateChecklist('continuity', this.checked)">
+                            <label for="chk_continuity">
+                                Invoice continuity checked (no missing numbers)
+                                {% if record.chk_continuity_time %}
+                                <span class="timestamp">✓ {{ record.chk_continuity_time }}</span>
+                                {% endif %}
+                            </label>
+                        </div>
+                        <div class="checklist-item">
+                            <input type="checkbox" id="chk_hsn" 
+                                {% if record.chk_hsn %}checked{% endif %} 
+                                {% if not can_edit %}disabled{% endif %}
+                                onchange="updateChecklist('hsn', this.checked)">
+                            <label for="chk_hsn">
+                                HSN codes verified
+                                {% if record.chk_hsn_time %}
+                                <span class="timestamp">✓ {{ record.chk_hsn_time }}</span>
+                                {% endif %}
+                            </label>
+                        </div>
+                        <div class="checklist-item">
+                            <input type="checkbox" id="chk_nil" 
+                                {% if record.chk_nil %}checked{% endif %} 
+                                {% if not can_edit %}disabled{% endif %}
+                                onchange="updateChecklist('nil', this.checked)">
+                            <label for="chk_nil">
+                                Nil rated/exempted sales confirmation (if applicable)
+                                {% if record.chk_nil_time %}
+                                <span class="timestamp">✓ {{ record.chk_nil_time }}</span>
+                                {% endif %}
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Data Entry -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>💰 Sales Data Entry</h2>
+                        {% if can_edit %}
+                        <span style="font-size: 0.875rem; color: var(--gray-600);">💡 Auto-saves as you type</span>
+                        {% endif %}
+                    </div>
+                    <div class="card-body">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label class="form-label">B2B Sales</label>
+                                <div class="input-group">
+                                    <span class="input-prefix">₹</span>
+                                    <input type="number" step="0.01" class="form-control" id="b2b_sales"
+                                           value="{{ record.b2b_sales or 0 }}" {% if not can_edit %}disabled{% endif %}
+                                           oninput="calculateTotals(); queueSave();">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">B2C Sales</label>
+                                <div class="input-group">
+                                    <span class="input-prefix">₹</span>
+                                    <input type="number" step="0.01" class="form-control" id="b2c_sales"
+                                           value="{{ record.b2c_sales or 0 }}" {% if not can_edit %}disabled{% endif %}
+                                           oninput="calculateTotals(); queueSave();">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Credit Notes (-)</label>
+                                <div class="input-group">
+                                    <span class="input-prefix">₹</span>
+                                    <input type="number" step="0.01" class="form-control" id="credit_note"
+                                           value="{{ record.credit_note or 0 }}" {% if not can_edit %}disabled{% endif %}
+                                           oninput="calculateTotals(); queueSave();">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Debit Notes (+)</label>
+                                <div class="input-group">
+                                    <span class="input-prefix">₹</span>
+                                    <input type="number" step="0.01" class="form-control" id="debit_note"
+                                           value="{{ record.debit_note or 0 }}" {% if not can_edit %}disabled{% endif %}
+                                           oninput="calculateTotals(); queueSave();">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">SEZ/Exempted Sales</label>
+                                <div class="input-group">
+                                    <span class="input-prefix">₹</span>
+                                    <input type="number" step="0.01" class="form-control" id="sez_exempted"
+                                           value="{{ record.sez_exempted or 0 }}" {% if not can_edit %}disabled{% endif %}
+                                           oninput="calculateTotals(); queueSave();">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Sales as per Tally/Books</label>
+                                <div class="input-group">
+                                    <span class="input-prefix">₹</span>
+                                    <input type="number" step="0.01" class="form-control" id="sales_as_per_tally"
+                                           value="{{ record.sales_as_per_tally or 0 }}" {% if not can_edit %}disabled{% endif %}
+                                           oninput="calculateTotals(); queueSave();">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 1.5rem; display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;">
+                            <div class="form-group">
+                                <label class="form-label">CGST Amount</label>
+                                <div class="input-group">
+                                    <span class="input-prefix">₹</span>
+                                    <input type="number" step="0.01" class="form-control" id="total_cgst"
+                                           value="{{ record.total_cgst or 0 }}" {% if not can_edit %}disabled{% endif %}
+                                           oninput="queueSave();">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">SGST Amount</label>
+                                <div class="input-group">
+                                    <span class="input-prefix">₹</span>
+                                    <input type="number" step="0.01" class="form-control" id="total_sgst"
+                                           value="{{ record.total_sgst or 0 }}" {% if not can_edit %}disabled{% endif %}
+                                           oninput="queueSave();">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">IGST Amount</label>
+                                <div class="input-group">
+                                    <span class="input-prefix">₹</span>
+                                    <input type="number" step="0.01" class="form-control" id="total_igst"
+                                           value="{{ record.total_igst or 0 }}" {% if not can_edit %}disabled{% endif %}
+                                           oninput="queueSave();">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Calculations & Actions -->
+            <div class="col-4">
+                <!-- Real-time Calculations -->
+                <div class="card" style="margin-bottom: 1.5rem;">
+                    <div class="card-header">
+                        <h2>📊 Real-time Summary</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="calc-display" style="margin-bottom: 1rem;">
+                            <div class="calc-label">Total Taxable Value</div>
+                            <div class="calc-value" id="display_total">₹ {{ "%.2f"|format(record.total_sales or 0) }}</div>
+                        </div>
+
+                        <div class="calc-display" style="border-left-color: var(--success); background: #f0fdf4;">
+                            <div class="calc-label">Variance (GSTR-1 vs Tally)</div>
+                            <div class="calc-value" id="display_variance">
+                                {% if (record.variance or 0) == 0 %}
+                                    <span style="color: var(--success);">✓ Matched</span>
+                                {% else %}
+                                    ₹ {{ "%.2f"|format(record.variance or 0) }}
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        {% if (record.variance or 0) != 0 %}
+                        <div style="margin-top: 1rem; padding: 0.75rem; background: #fee2e2; border-radius: var(--radius); font-size: 0.875rem; color: #991b1b;">
+                            ⚠️ Variance detected. Please check before submitting.
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>⚡ Actions</h2>
+                    </div>
+                    <div class="card-body">
+                        {% if can_edit and record.status == 'draft' %}
+                        <form id="submitReviewForm" method="POST" action="{{ url_for('submit_gstr1_review') }}">
+                            <input type="hidden" name="record_id" value="{{ record.id }}">
+                            <div class="form-group">
+                                <label class="form-label">Select Reviewer *</label>
+                                <select name="reviewer_id" class="form-control" required>
+                                    <option value="">-- Choose Reviewer --</option>
+                                    {% for r in reviewers %}
+                                    <option value="{{ r.id }}">{{ r.username }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; margin-bottom: 0.75rem;"
+                                    onclick="return confirm('Submit for review? You cannot edit after submission.')">
+                                📤 Submit for Review
+                            </button>
+                        </form>
+                        {% endif %}
+
+                        {% if can_review %}
+                        <form method="POST" action="{{ url_for('gstr1_review_action') }}">
+                            <input type="hidden" name="record_id" value="{{ record.id }}">
+                            <input type="hidden" name="action" value="approve">
+                            <button type="submit" class="btn btn-success" style="width: 100%; margin-bottom: 0.75rem;"
+                                    onclick="return confirm('Approve this GSTR-1?')">
+                                ✅ Approve for Filing
+                            </button>
+                        </form>
+                        <form method="POST" action="{{ url_for('gstr1_review_action') }}">
+                            <input type="hidden" name="record_id" value="{{ record.id }}">
+                            <input type="hidden" name="action" value="reject">
+                            <div class="form-group">
+                                <textarea name="remarks" class="form-control" placeholder="Reason for sending back..." required></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-danger" style="width: 100%;"
+                                    onclick="return confirm('Send back to preparer?')">
+                                ❌ Send Back
+                            </button>
+                        </form>
+                        {% endif %}
+
+                        {% if can_file and record.status == 'approved' %}
+                        <form method="POST" action="{{ url_for('file_gstr1') }}">
+                            <input type="hidden" name="record_id" value="{{ record.id }}">
+                            <div class="form-group">
+                                <label class="form-label">ARN Number *</label>
+                                <input type="text" name="arn_number" class="form-control" required placeholder="e.g., AB123456789">
+                            </div>
+                            <button type="submit" class="btn btn-success" style="width: 100%;"
+                                    onclick="return confirm('WARNING: This will LOCK the record permanently!')">
+                                🔒 File & Lock
+                            </button>
+                        </form>
+                        {% endif %}
+
+                        {% if record.status == 'locked' %}
+                        <div style="text-align: center;">
+                            <a href="{{ url_for('gstr3b_form', client_id=client.id, month=month, year=year) }}" 
+                               class="btn btn-success btn-lg" style="width: 100%;">
+                                Proceed to GSTR-3B →
+                            </a>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Assignment Info -->
+                {% if assignment %}
+                <div class="card" style="margin-top: 1.5rem;">
+                    <div class="card-header" style="background: #eff6ff;">
+                        <h2>👤 Assignment</h2>
+                    </div>
+                    <div class="card-body" style="font-size: 0.875rem;">
+                        <div style="margin-bottom: 0.5rem;">
+                            <strong>GSTR-1 Preparer:</strong><br>
+                            {% if assignment.gstr1_preparer_id %}
+                                {{ assignment.gstr1_preparer_id }}
+                            {% else %}
+                                <span style="color: var(--gray-600);">Not assigned</span>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <strong>GSTR-3B Preparer:</strong><br>
+                            {% if assignment.gstr3b_preparer_id %}
+                                {{ assignment.gstr3b_preparer_id }}
+                            {% else %}
+                                <span style="color: var(--gray-600);">Not assigned</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </main>
+
+    <!-- Auto-save Indicator -->
+    <div id="saveIndicator" class="save-indicator">
+        ✅ Saved
+    </div>
+
+    <script>
+        let saveTimeout;
+
+        // Real-time calculation
+        function calculateTotals() {
+            const b2b = parseFloat(document.getElementById('b2b_sales').value) || 0;
+            const b2c = parseFloat(document.getElementById('b2c_sales').value) || 0;
+            const credit = parseFloat(document.getElementById('credit_note').value) || 0;
+            const debit = parseFloat(document.getElementById('debit_note').value) || 0;
+            const sez = parseFloat(document.getElementById('sez_exempted').value) || 0;
+            const tally = parseFloat(document.getElementById('sales_as_per_tally').value) || 0;
+
+            const total = b2b + b2c - credit + debit + sez;
+            const variance = total - tally;
+
+            document.getElementById('display_total').textContent = '₹ ' + total.toFixed(2);
+
+            const varElem = document.getElementById('display_variance');
+            if (Math.abs(variance) < 0.01) {
+                varElem.innerHTML = '<span style="color: var(--success);">✓ Matched</span>';
+            } else {
+                varElem.textContent = '₹ ' + variance.toFixed(2);
+                varElem.className = 'calc-value ' + (variance > 0 ? 'variance-positive' : 'variance-negative');
+            }
+        }
+
+        // Auto-save functionality
+        function queueSave() {
+            clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(autoSave, 1500); // Save after 1.5s of no typing
+        }
+
+        function autoSave() {
+            {% if can_edit %}
+            const data = {
+                record_id: {{ record.id }},
+                b2b_sales: document.getElementById('b2b_sales').value,
+                b2c_sales: document.getElementById('b2c_sales').value,
+                credit_note: document.getElementById('credit_note').value,
+                debit_note: document.getElementById('debit_note').value,
+                sez_exempted: document.getElementById('sez_exempted').value,
+                sales_as_per_tally: document.getElementById('sales_as_per_tally').value,
+                total_cgst: document.getElementById('total_cgst').value,
+                total_sgst: document.getElementById('total_sgst').value,
+                total_igst: document.getElementById('total_igst').value
+            };
+
+            fetch('/api/gstr1/autosave', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    showSaveIndicator();
+                }
+            });
+            {% endif %}
+        }
+
+        function showSaveIndicator() {
+            const ind = document.getElementById('saveIndicator');
+            ind.classList.add('show');
+            setTimeout(() => ind.classList.remove('show'), 2000);
+        }
+
+        // Checklist update with timestamp
+        function updateChecklist(field, checked) {
+            {% if can_edit %}
+            fetch('/api/gstr1/checklist', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    record_id: {{ record.id }},
+                    field: field,
+                    checked: checked
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success && checked) {
+                    // Add timestamp visually
+                    const label = document.querySelector(`label[for="chk_${field}"]`);
+                    const timestamp = new Date().toLocaleString('en-IN', {
+                        day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+                    });
+
+                    // Remove existing timestamp if any
+                    const existing = label.querySelector('.timestamp');
+                    if (existing) existing.remove();
+
+                    // Add new timestamp
+                    const span = document.createElement('span');
+                    span.className = 'timestamp';
+                    span.textContent = '✓ ' + timestamp;
+                    label.appendChild(span);
+                }
+            });
+            {% endif %}
+        }
+
+        // Initial calculation
+        calculateTotals();
+    </script>
+</body>
+</html>

@@ -1,0 +1,95 @@
+# GST Pro - Quick Start Guide (5 Minutes)
+
+## For Administrators (You)
+
+### 1. First Time Setup (2 min)
+```
+1. Double-click install.bat
+2. Wait for "Installation Successful"
+3. Double-click run.bat
+4. Keep black window open
+```
+
+### 2. Create Users (2 min)
+1. Open browser → http://localhost:5000
+2. Login: admin / admin123
+3. Click "Admin Panel" (top menu)
+4. Click "+ Add User"
+5. Add your team members:
+   - Username: their first name (lowercase)
+   - Password: temp123 (they can't change it, only you can)
+   - Role: preparer (for juniors) or reviewer (for seniors)
+
+### 3. Add Clients (1 min)
+1. In Admin Panel, scroll to "Client Allocations"
+2. Select Month/Year (usually auto-selected)
+3. For each row:
+   - Select preparer for GSTR-1
+   - Select preparer for GSTR-3B (usually same person)
+   - Click "Save"
+
+🎉 **Done!** Tell your staff to login and start working.
+
+---
+
+## For Preparers (Junior Staff)
+
+### Daily Workflow
+1. **Login** with your username
+2. **Dashboard** shows YOUR clients only
+3. **Click client** to open GSTR-1
+4. **Tick checklist** (with your mouse)
+5. **Enter numbers** (calculates automatically)
+6. **Submit** when done (select reviewer from dropdown)
+
+**Important:**
+- System saves automatically, but you can see "✅ Saved" at bottom-right
+- If variance is not zero, check your numbers!
+- Once submitted, you cannot edit until reviewer sends back
+
+---
+
+## For Reviewers (Senior Staff/CA)
+
+### Daily Workflow
+1. **Login** → See "Review Dashboard"
+2. **See inbox** of submitted work
+3. **Click item** → Review numbers
+4. Either:
+   - ✅ **Approve** (green button) - allows filing
+   - ❌ **Send Back** (red button) - add comments why
+
+**Tip:** Check variance column first. If zero, likely correct.
+
+---
+
+## For Filing (Preparer or Reviewer)
+
+After Approval:
+1. Go to actual GST Portal (outside this system)
+2. Generate JSON/Upload data
+3. File return
+4. **Get ARN number** from portal
+5. Come back to system
+6. Enter ARN in "ARN Number" field
+7. Click "🔒 File & Lock"
+
+**Locked means:** No changes allowed. Permanent record.
+
+---
+
+## Emergency Contacts
+
+**Server Issues:** [Your IT person]
+**Password Reset:** Administrator only
+**Data Questions:** [Your senior CA]
+
+## Keyboard Shortcuts
+- None currently (mouse only)
+- Auto-save happens automatically
+
+## Color Codes
+- 🟢 Green: File locked (complete)
+- 🔵 Blue: Approved (ready to file)
+- 🟡 Yellow: Draft/Review in progress
+- 🔴 Red: Overdue (past due date)
